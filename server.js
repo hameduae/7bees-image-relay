@@ -33,7 +33,7 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       if (tooBig) return;
       const buf = Buffer.concat(chunks);
-      store.set(id, { buffer: buf, mime: MIME[ext], expires: Date.now() + 30 * 60 * 1000 });
+      store.set(id, { buffer: buf, mime: MIME[ext], expires: Date.now() + 24 * 60 * 60 * 1000 }); // 24h TTL: Meta/Instagram's crawler can retry fetching the image_url for well over an hour, so a short TTL causes 404s and "media download failed" errors even on a successful upload.
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const proto = req.headers['x-forwarded-proto'] || 'https';
       res.writeHead(200, { 'content-type': 'application/json' });

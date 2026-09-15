@@ -32,7 +32,25 @@ const server = http.createServer((req, res) => {
     });
     req.on('end', () => {
       if (tooBig) return;
-      const buf = Buffer.concat(chunks);
+      let buf = Buffer.concat(chunks);
+
+      // Workaround for an n8n `this.helpers.httpRequest` quirk confirmed by
+      // direct testing on 2026-09-15: even with `json: false` explicitly set,
+      // n8n can still JSON.stringify a raw Buffer body before sending it, so
+      // what arrives here is the TEXT '{"type":"Buffer","data":[...]}'
+      // instead of real image bytes. This cannot be fixed from the n8n side,
+      // so detect and unwrap it here instead.
+      if (buf.length > 20 && buf.slice(0, 15).toString('utf8') === '{"type":"Buffer') {
+        try {
+          const parsed = JSON.parse(buf.toString('utf8'));
+          if (parsed && parsed.type === 'Buffer' && Array.isArray(parsed.data)) {
+            buf = Buffer.from(parsed.data);
+          }
+        } catch (e) {
+          // Matched the prefix but wasn't actually valid JSON -- fall back to raw buf.
+        }
+      }
+
       store.set(id, { buffer: buf, mime: MIME[ext], expires: Date.now() + 24 * 60 * 60 * 1000 }); // 24h TTL: Meta/Instagram's crawler can retry fetching the image_url for well over an hour, so a short TTL causes 404s and "media download failed" errors even on a successful upload.
       const host = req.headers['x-forwarded-host'] || req.headers.host;
       const proto = req.headers['x-forwarded-proto'] || 'https';
